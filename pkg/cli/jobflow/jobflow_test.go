@@ -1,22 +1,23 @@
-package jobtemplate
+package jobflow
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
+	"github.com/spf13/cobra"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	flowv1alpha1 "volcano.sh/apis/pkg/apis/flow/v1alpha1"
-	"volcano.sh/volcano/pkg/cli/util"
 )
 
-func TestListJobTemplate(t *testing.T) {
+func TestListJobFlow(t *testing.T) {
 	testCases := []struct {
 		name           string
 		Response       interface{}
@@ -26,34 +27,40 @@ func TestListJobTemplate(t *testing.T) {
 	}{
 		{
 			name: "Normal Case",
-			Response: &flowv1alpha1.JobTemplateList{
-				Items: []flowv1alpha1.JobTemplate{
+			Response: &flowv1alpha1.JobFlowList{
+				Items: []flowv1alpha1.JobFlow{
 					{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "test-jobtemplate",
-							Namespace: "default",
+							Name:              "test-jobflow",
+							Namespace:         "default",
+							CreationTimestamp: metav1.Now(),
+						},
+						Status: flowv1alpha1.JobFlowStatus{
+							State: flowv1alpha1.State{
+								Phase: "Succeed",
+							},
 						},
 					},
 				},
 			},
 			Namespace:   "default",
 			ExpectedErr: nil,
-			ExpectedOutput: `Name                Namespace    
-test-jobtemplate    default`,
+			ExpectedOutput: `Name            Namespace    Phase      Age    
+test-jobflow    default      Succeed    0s`,
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			server := util.CreateTestServer(testCase.Response)
+			server := createTestServer(testCase.Response)
 			defer server.Close()
 			// Set the server URL as the master flag
-			listJobTemplateFlags.Master = server.URL
-			listJobTemplateFlags.Namespace = testCase.Namespace
+			listJobFlowFlags.Master = server.URL
+			listJobFlowFlags.Namespace = testCase.Namespace
 
-			r, oldStdout := util.RedirectStdout()
+			r, oldStdout := redirectStdout()
 			defer r.Close()
-			err := ListJobTemplate(context.TODO())
-			gotOutput := util.CaptureOutput(r, oldStdout)
+			err := ListJobFlow(context.TODO())
+			gotOutput := captureOutput(r, oldStdout)
 
 			if !reflect.DeepEqual(err, testCase.ExpectedErr) {
 				t.Fatalf("test case: %s failed: got: %v, want: %v", testCase.name, err, testCase.ExpectedErr)
@@ -65,10 +72,10 @@ test-jobtemplate    default`,
 	}
 }
 
-func TestGetJobTemplate(t *testing.T) {
+func TestGetJobFlow(t *testing.T) {
 	testCases := []struct {
 		name           string
-		Response       *flowv1alpha1.JobTemplate
+		Response       *flowv1alpha1.JobFlow
 		Namespace      string
 		Name           string
 		ExpectedErr    error
@@ -76,48 +83,53 @@ func TestGetJobTemplate(t *testing.T) {
 	}{
 		{
 			name: "Normal Case",
-			Response: &flowv1alpha1.JobTemplate{
+			Response: &flowv1alpha1.JobFlow{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-jobtemplate",
-					Namespace: "default",
+					Name:              "test-jobflow",
+					Namespace:         "default",
+					CreationTimestamp: metav1.Now(),
+				},
+				Status: flowv1alpha1.JobFlowStatus{
+					State: flowv1alpha1.State{
+						Phase: "Succeed",
+					},
 				},
 			},
 			Namespace:   "default",
-			Name:        "test-jobtemplate",
+			Name:        "test-jobflow",
 			ExpectedErr: nil,
-			ExpectedOutput: `Name                Namespace    
-test-jobtemplate    default`,
+			ExpectedOutput: `Name            Namespace    Phase      Age    
+test-jobflow    default      Succeed    0s`,
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			server := util.CreateTestServer(testCase.Response)
+			server := createTestServer(testCase.Response)
 			defer server.Close()
 			// Set the server URL as the master flag
-			getJobTemplateFlags.Master = server.URL
+			getJobFlowFlags.Master = server.URL
 			// Set the namespace and name as the flags
-			getJobTemplateFlags.Namespace = testCase.Namespace
-			getJobTemplateFlags.Name = testCase.Name
+			getJobFlowFlags.Namespace = testCase.Namespace
+			getJobFlowFlags.Name = testCase.Name
 
-			r, oldStdout := util.RedirectStdout()
+			r, oldStdout := redirectStdout()
 			defer r.Close()
-			err := GetJobTemplate(context.TODO())
-			gotOutput := util.CaptureOutput(r, oldStdout)
+			err := GetJobFlow(context.TODO())
+			gotOutput := captureOutput(r, oldStdout)
 			if !reflect.DeepEqual(err, testCase.ExpectedErr) {
 				t.Fatalf("test case: %s failed: got: %v, want: %v", testCase.name, err, testCase.ExpectedErr)
 			}
 			if gotOutput != testCase.ExpectedOutput {
-				fmt.Println(gotOutput)
 				t.Fatalf("test case: %s failed: got: %s, want: %s", testCase.name, gotOutput, testCase.ExpectedOutput)
 			}
 		})
 	}
 }
 
-func TestDeleteJobTemplate(t *testing.T) {
+func TestDeleteJobFlow(t *testing.T) {
 	testCases := []struct {
 		name           string
-		Response       *flowv1alpha1.JobTemplate
+		Response       *flowv1alpha1.JobFlow
 		Namespace      string
 		Name           string
 		FilePath       string
@@ -126,40 +138,40 @@ func TestDeleteJobTemplate(t *testing.T) {
 	}{
 		{
 			name: "Normal Case",
-			Response: &flowv1alpha1.JobTemplate{
+			Response: &flowv1alpha1.JobFlow{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-jobtemplate",
+					Name:      "test-jobflow",
 					Namespace: "default",
 				},
 			},
 			Namespace:      "default",
-			Name:           "test-jobtemplate",
+			Name:           "test-jobflow",
 			ExpectedErr:    nil,
-			ExpectedOutput: `Deleted JobTemplate: default/test-jobtemplate`,
+			ExpectedOutput: `Deleted JobFlow: default/test-jobflow`,
 		},
 		{
 			name: "Normal Case",
-			Response: &flowv1alpha1.JobTemplate{
+			Response: &flowv1alpha1.JobFlow{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-jobtemplate",
+					Name:      "test-jobflow",
 					Namespace: "default",
 				},
 			},
 			FilePath:    "test.yaml",
 			ExpectedErr: nil,
-			ExpectedOutput: `Deleted JobTemplate: default/a
-Deleted JobTemplate: default/b`,
+			ExpectedOutput: `Deleted JobFlow: default/test-a
+Deleted JobFlow: default/test-b`,
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			server := util.CreateTestServer(testCase.Response)
+			server := createTestServer(testCase.Response)
 			defer server.Close()
 			// Set the server URL as the master flag
-			deleteJobTemplateFlags.Master = server.URL
-			deleteJobTemplateFlags.Namespace = testCase.Namespace
-			deleteJobTemplateFlags.Name = testCase.name
-			deleteJobTemplateFlags.FilePath = testCase.FilePath
+			deleteJobFlowFlags.Master = server.URL
+			deleteJobFlowFlags.Namespace = testCase.Namespace
+			deleteJobFlowFlags.Name = testCase.name
+			deleteJobFlowFlags.FilePath = testCase.FilePath
 
 			if testCase.FilePath != "" {
 				err := createAndWriteFile(testCase.FilePath, content)
@@ -175,10 +187,10 @@ Deleted JobTemplate: default/b`,
 				}()
 			}
 
-			r, oldStdout := util.RedirectStdout()
+			r, oldStdout := redirectStdout()
 			defer r.Close()
-			err := DeleteJobTemplate(context.TODO())
-			gotOutput := util.CaptureOutput(r, oldStdout)
+			err := DeleteJobFlow(context.TODO())
+			gotOutput := captureOutput(r, oldStdout)
 			if !reflect.DeepEqual(err, testCase.ExpectedErr) {
 				t.Fatalf("test case: %s failed: got: %v, want: %v", testCase.name, err, testCase.ExpectedErr)
 			}
@@ -189,35 +201,35 @@ Deleted JobTemplate: default/b`,
 	}
 }
 
-func TestCreateJobTemplate(t *testing.T) {
+func TestCreateJobFlow(t *testing.T) {
 	testCases := []struct {
 		name           string
-		Response       *flowv1alpha1.JobTemplate
+		Response       *flowv1alpha1.JobFlow
 		FilePath       string
 		ExpectedErr    error
 		ExpectedOutput string
 	}{
 		{
 			name: "Normal Case",
-			Response: &flowv1alpha1.JobTemplate{
+			Response: &flowv1alpha1.JobFlow{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-jobtemplate",
+					Name:      "test-jobflow",
 					Namespace: "default",
 				},
 			},
 			FilePath:    "test.yaml",
 			ExpectedErr: nil,
-			ExpectedOutput: `Created JobTemplate: default/a
-Created JobTemplate: default/b`,
+			ExpectedOutput: `Created JobFlow: default/test-a
+Created JobFlow: default/test-b`,
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			server := util.CreateTestServer(testCase.Response)
+			server := createTestServer(testCase.Response)
 			defer server.Close()
 			// Set the server URL as the master flag
-			createJobTemplateFlags.Master = server.URL
-			createJobTemplateFlags.FilePath = testCase.FilePath
+			createJobFlowFlags.Master = server.URL
+			createJobFlowFlags.FilePath = testCase.FilePath
 
 			if testCase.FilePath != "" {
 				err := createAndWriteFile(testCase.FilePath, content)
@@ -232,10 +244,10 @@ Created JobTemplate: default/b`,
 					}
 				}()
 			}
-			r, oldStdout := util.RedirectStdout()
+			r, oldStdout := redirectStdout()
 			defer r.Close()
-			err := CreateJobTemplate(context.TODO())
-			gotOutput := util.CaptureOutput(r, oldStdout)
+			err := CreateJobFlow(context.TODO())
+			gotOutput := captureOutput(r, oldStdout)
 			if !reflect.DeepEqual(err, testCase.ExpectedErr) {
 				t.Fatalf("test case: %s failed: got: %v, want: %v", testCase.name, err, testCase.ExpectedErr)
 			}
@@ -246,10 +258,10 @@ Created JobTemplate: default/b`,
 	}
 }
 
-func TestDescribeJobTemplate(t *testing.T) {
+func TestDescribeJobFlow(t *testing.T) {
 	testCases := []struct {
 		name           string
-		Response       *flowv1alpha1.JobTemplate
+		Response       *flowv1alpha1.JobFlow
 		Namespace      string
 		Name           string
 		Format         string
@@ -258,63 +270,75 @@ func TestDescribeJobTemplate(t *testing.T) {
 	}{
 		{
 			name: "Normal Case, use yaml format",
-			Response: &flowv1alpha1.JobTemplate{
+			Response: &flowv1alpha1.JobFlow{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: flowv1alpha1.SchemeGroupVersion.String(),
+					Kind:       "JobFlow",
+				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-jobtemplate",
+					Name:      "test-jobflow",
 					Namespace: "default",
 				},
 			},
 			Namespace:   "default",
-			Name:        "test-jobtemplate",
+			Name:        "test-jobflow",
 			Format:      "yaml",
 			ExpectedErr: nil,
-			ExpectedOutput: `metadata:
+			ExpectedOutput: `apiVersion: flow.volcano.sh/v1alpha1
+kind: JobFlow
+metadata:
   creationTimestamp: null
-  name: test-jobtemplate
+  name: test-jobflow
   namespace: default
 spec: {}
-status: {}
-
----------------------------------`,
+status:
+  state: {}`,
 		},
 		{
 			name: "Normal Case, use json format",
-			Response: &flowv1alpha1.JobTemplate{
+			Response: &flowv1alpha1.JobFlow{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: flowv1alpha1.SchemeGroupVersion.String(),
+					Kind:       "JobFlow",
+				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-jobtemplate",
+					Name:      "test-jobflow",
 					Namespace: "default",
 				},
 			},
 			Namespace:   "default",
-			Name:        "test-jobtemplate",
+			Name:        "test-jobflow",
 			Format:      "json",
 			ExpectedErr: nil,
 			ExpectedOutput: `{
+  "kind": "JobFlow",
+  "apiVersion": "flow.volcano.sh/v1alpha1",
   "metadata": {
-    "name": "test-jobtemplate",
+    "name": "test-jobflow",
     "namespace": "default",
     "creationTimestamp": null
   },
   "spec": {},
-  "status": {}
-}
----------------------------------`,
+  "status": {
+    "state": {}
+  }
+}`,
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			server := util.CreateTestServer(testCase.Response)
+			server := createTestServer(testCase.Response)
 			defer server.Close()
 			// Set the server URL as the master flag
-			describeJobTemplateFlags.Master = server.URL
-			describeJobTemplateFlags.Namespace = testCase.Namespace
-			describeJobTemplateFlags.Name = testCase.name
-			describeJobTemplateFlags.Format = testCase.Format
+			describeJobFlowFlags.Master = server.URL
+			describeJobFlowFlags.Namespace = testCase.Namespace
+			describeJobFlowFlags.Name = testCase.name
+			describeJobFlowFlags.Format = testCase.Format
 
-			r, oldStdout := util.RedirectStdout()
+			r, oldStdout := redirectStdout()
 			defer r.Close()
-			err := DescribeJobTemplate(context.TODO())
-			gotOutput := util.CaptureOutput(r, oldStdout)
+			err := DescribeJobFlow(context.TODO())
+			gotOutput := captureOutput(r, oldStdout)
 			if !reflect.DeepEqual(err, testCase.ExpectedErr) {
 				t.Fatalf("test case: %s failed: got: %v, want: %v", testCase.name, err, testCase.ExpectedErr)
 			}
@@ -323,6 +347,36 @@ status: {}
 			}
 		})
 	}
+}
+
+func createTestServer(response interface{}) *httptest.Server {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		val, err := json.Marshal(response)
+		if err == nil {
+			w.Write(val)
+		}
+	})
+
+	server := httptest.NewServer(handler)
+	return server
+}
+
+// redirectStdout redirects os.Stdout to a pipe and returns the read and write ends of the pipe.
+func redirectStdout() (*os.File, *os.File) {
+	r, w, _ := os.Pipe()
+	oldStdout := os.Stdout
+	os.Stdout = w
+	return r, oldStdout
+}
+
+// captureOutput reads from r until EOF and returns the result as a string.
+func captureOutput(r *os.File, oldStdout *os.File) string {
+	w := os.Stdout
+	os.Stdout = oldStdout
+	w.Close()
+	gotOutput, _ := io.ReadAll(r)
+	return strings.TrimSpace(string(gotOutput))
 }
 
 func createAndWriteFile(filePath, content string) error {
@@ -399,77 +453,46 @@ func TestInitDeleteFlags(t *testing.T) {
 }
 
 var content = `apiVersion: flow.volcano.sh/v1alpha1
-kind: JobTemplate
+kind: JobFlow
 metadata:
-  name: a
+  name: test-a
   namespace: default
 spec:
-  minAvailable: 1
-  schedulerName: volcano
-  priorityClassName: high-priority
-  policies:
-    - event: PodEvicted
-      action: RestartJob
-  plugins:
-    ssh: []
-    env: []
-    svc: []
-  maxRetry: 5
-  queue: default
-  tasks:
-    - replicas: 1
-      name: "default-nginx"
-      template:
-        metadata:
-          name: web
-        spec:
-          containers:
-            - image: nginx:1.14.2
-              command:
-                - sh
-                - -c
-                - sleep 10s
-              imagePullPolicy: IfNotPresent
-              name: nginx
-              resources:
-                requests:
-                  cpu: "1"
-          restartPolicy: OnFailure
+  jobRetainPolicy: delete   # After jobflow runs, keep the generated job. Otherwise, delete it.
+  flows:
+    - name: a
+    - name: b
+      dependsOn:
+        targets: ['a']
+    - name: c
+      dependsOn:
+        targets: ['b']
+    - name: d
+      dependsOn:
+        targets: ['b']
+    - name: e
+      dependsOn:
+        targets: ['c','d']
 ---
 apiVersion: flow.volcano.sh/v1alpha1
-kind: JobTemplate
+kind: JobFlow
 metadata:
-  name: b
+  name: test-b
+  namespace: default
 spec:
-  minAvailable: 1
-  schedulerName: volcano
-  priorityClassName: high-priority
-  policies:
-    - event: PodEvicted
-      action: RestartJob
-  plugins:
-    ssh: []
-    env: []
-    svc: []
-  maxRetry: 5
-  queue: default
-  tasks:
-    - replicas: 1
-      name: "default-nginx"
-      template:
-        metadata:
-          name: web
-        spec:
-          containers:
-            - image: nginx:1.14.2
-              command:
-                - sh
-                - -c
-                - sleep 10s
-              imagePullPolicy: IfNotPresent
-              name: nginx
-              resources:
-                requests:
-                  cpu: "1"
-          restartPolicy: OnFailure
+  jobRetainPolicy: delete   # After jobflow runs, keep the generated job. Otherwise, delete it.
+  flows:
+    - name: a
+    - name: b
+      dependsOn:
+        targets: ['a']
+    - name: c
+      dependsOn:
+        targets: ['b']
+    - name: d
+      dependsOn:
+        targets: ['b']
+    - name: e
+      dependsOn:
+        targets: ['c','d']
 ---`
