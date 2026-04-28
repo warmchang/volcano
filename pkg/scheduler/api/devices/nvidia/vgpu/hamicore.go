@@ -37,10 +37,7 @@ func (f HAMICoreFactory) TryAddPod(gd *GPUDevice, mem uint, core uint) (bool, st
 }
 
 func (f HAMICoreFactory) AddPod(gd *GPUDevice, mem uint, core uint, podUID string, devID string) error {
-	_, ok := gd.PodMap[podUID]
-	if ok {
-		// Keep AddPod idempotent in case the same pod allocation is replayed
-		// during cache/node refresh.
+	if _, ok := gd.PodMap[podUID]; ok {
 		return nil
 	}
 	gd.PodMap[podUID] = &GPUUsage{
@@ -68,9 +65,6 @@ func (f HAMICoreFactory) SubPod(gd *GPUDevice, mem uint, core uint, podUID strin
 	gd.UsedMem -= mem
 	gd.UsedCore -= core
 	klog.V(4).Infoln("sub Pod: ", podUID, mem)
-	// Remove the per-pod entry so the AddPod idempotency guard does not
-	// see a stale entry if the same UID is added again, and so PodMap
-	// does not grow without bound between SetNode rebuilds.
 	delete(gd.PodMap, podUID)
 	return nil
 }

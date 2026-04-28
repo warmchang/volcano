@@ -90,9 +90,6 @@ func (f MIGFactory) SubPod(gd *GPUDevice, mem uint, core uint, podUID string, de
 	gd.UsedCore -= core
 
 	klog.V(4).Infoln("sub Pod: ", podUID, usedMem)
-	// Remove the per-pod entry so the AddPod idempotency guard does not
-	// see a stale entry if the same UID is added again, and so PodMap
-	// does not grow without bound between SetNode rebuilds.
 	delete(gd.PodMap, podUID)
 	return nil
 }

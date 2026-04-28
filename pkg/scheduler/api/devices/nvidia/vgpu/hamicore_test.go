@@ -116,7 +116,6 @@ func TestHAMICoreFactory_SubPodRemovesEntry(t *testing.T) {
 	if gd.UsedNum != 0 || gd.UsedMem != 0 || gd.UsedCore != 0 {
 		t.Errorf("after SubPod: got %d/%d/%d, want 0/0/0", gd.UsedNum, gd.UsedMem, gd.UsedCore)
 	}
-	// Same-UID re-add after Sub must increment, not no-op against a stale entry.
 	if err := f.AddPod(gd, 1000, 25, podUID, gd.UUID); err != nil {
 		t.Fatalf("re-AddPod: %v", err)
 	}
