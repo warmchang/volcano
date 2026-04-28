@@ -67,8 +67,10 @@ func (f HAMICoreFactory) SubPod(gd *GPUDevice, mem uint, core uint, podUID strin
 	gd.UsedNum--
 	gd.UsedMem -= mem
 	gd.UsedCore -= core
-	gd.PodMap[podUID].UsedMem -= mem
-	gd.PodMap[podUID].UsedCore -= core
-	klog.V(4).Infoln("sub Pod: ", podUID, mem, gd.PodMap[podUID].UsedMem, gd.PodMap[podUID].UsedCore)
+	klog.V(4).Infoln("sub Pod: ", podUID, mem)
+	// Remove the per-pod entry so the AddPod idempotency guard does not
+	// see a stale entry if the same UID is added again, and so PodMap
+	// does not grow without bound between SetNode rebuilds.
+	delete(gd.PodMap, podUID)
 	return nil
 }
