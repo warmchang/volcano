@@ -525,10 +525,10 @@ func TestInitPlugin(t *testing.T) {
 				}
 			}
 
-			// Verify PrefilterPlugins
+			// Verify PreFilterPlugins
 			for _, pluginName := range tt.expectInPrefilter {
-				if _, exists := pp.PrefilterPlugins[pluginName]; !exists {
-					t.Errorf("expected %s in PrefilterPlugins, but not found", pluginName)
+				if _, exists := pp.PreFilterPlugins[pluginName]; !exists {
+					t.Errorf("expected %s in PreFilterPlugins, but not found", pluginName)
 				}
 			}
 

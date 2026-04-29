@@ -104,17 +104,17 @@ type PredicatesPlugin struct {
 
 	FilterPlugins       map[string]fwk.FilterPlugin
 	StableFilterPlugins map[string]fwk.FilterPlugin // Subset of FilterPlugins for cache-stable filters
-	PrefilterPlugins    map[string]fwk.PreFilterPlugin
+	PreFilterPlugins    map[string]fwk.PreFilterPlugin
 	ReservePlugins      map[string]fwk.ReservePlugin
 	PreBindPlugins      map[string]fwk.PreBindPlugin
 	ScorePlugins        map[string]nodescore.BaseScorePlugin
 	ScoreWeights        map[string]int // Weight for each score plugin
-	filterPluginOrder   []string
-	stableFilterOrder   []string
-	preFilterOrder      []string
-	reserveOrder        []string
-	preBindOrder        []string
-	scoreOrder          []string
+	FilterOrder         []string
+	StableFilterOrder   []string
+	PreFilterOrder      []string
+	ReserveOrder        []string
+	PreBindOrder        []string
+	ScoreOrder          []string
 	PredicateCache      *predicateCache
 	Handle              fwk.Handle
 }
@@ -419,8 +419,8 @@ func (pp *PredicatesPlugin) PrePredicate(task *api.TaskInfo, state *k8sframework
 	}
 
 	// Run all PreFilter plugins
-	for _, name := range pp.preFilterOrder {
-		plugin, exists := pp.PrefilterPlugins[name]
+	for _, name := range pp.PreFilterOrder {
+		plugin, exists := pp.PreFilterPlugins[name]
 		if !exists {
 			continue
 		}
@@ -599,17 +599,17 @@ func (pp *PredicatesPlugin) InitPlugin() {
 
 	pp.FilterPlugins = filterPlugins
 	pp.StableFilterPlugins = stableFilterPlugins
-	pp.PrefilterPlugins = prefilterPlugins
+	pp.PreFilterPlugins = prefilterPlugins
 	pp.ReservePlugins = reservePlugins
 	pp.PreBindPlugins = preBindPlugins
 	pp.ScorePlugins = scorePlugins
 	pp.ScoreWeights = scoreWeights
-	pp.filterPluginOrder = filterOrder
-	pp.stableFilterOrder = stableFilterOrder
-	pp.preFilterOrder = preFilterOrder
-	pp.reserveOrder = reserveOrder
-	pp.preBindOrder = preBindOrder
-	pp.scoreOrder = scoreOrder
+	pp.FilterOrder = filterOrder
+	pp.StableFilterOrder = stableFilterOrder
+	pp.PreFilterOrder = preFilterOrder
+	pp.ReserveOrder = reserveOrder
+	pp.PreBindOrder = preBindOrder
+	pp.ScoreOrder = scoreOrder
 }
 
 // Predicate runs all Filter plugins for the given task and node.
@@ -643,7 +643,7 @@ func (pp *PredicatesPlugin) Predicate(task *api.TaskInfo, node *api.NodeInfo, st
 		// Run all stable filter plugins (for cache)
 		predicateStatus := make([]*api.Status, 0)
 
-		for _, name := range pp.stableFilterOrder {
+		for _, name := range pp.StableFilterOrder {
 			plugin, exists := pp.StableFilterPlugins[name]
 			if !exists {
 				continue
@@ -687,7 +687,7 @@ func (pp *PredicatesPlugin) Predicate(task *api.TaskInfo, node *api.NodeInfo, st
 	}
 
 	// Run all Filter plugins (except those in StableFilterPlugins)
-	for _, name := range pp.filterPluginOrder {
+	for _, name := range pp.FilterOrder {
 		plugin, exists := pp.FilterPlugins[name]
 		if !exists {
 			continue
@@ -724,7 +724,7 @@ func (pp *PredicatesPlugin) BatchNodeOrder(task *api.TaskInfo, nodes []fwk.NodeI
 	nodeScores := make(map[string]float64, len(nodes))
 
 	// Run all Score plugins
-	for _, name := range pp.scoreOrder {
+	for _, name := range pp.ScoreOrder {
 		plugin, exists := pp.ScorePlugins[name]
 		if !exists {
 			continue
@@ -758,7 +758,7 @@ func (pp *PredicatesPlugin) BatchNodeOrder(task *api.TaskInfo, nodes []fwk.NodeI
 func (pp *PredicatesPlugin) runReservePlugins(ssn *framework.Session, event *framework.Event) {
 	state := ssn.GetCycleState(event.Task.UID)
 
-	for _, name := range pp.reserveOrder {
+	for _, name := range pp.ReserveOrder {
 		plugin, exists := pp.ReservePlugins[name]
 		if !exists {
 			continue
@@ -774,13 +774,16 @@ func (pp *PredicatesPlugin) runReservePlugins(ssn *framework.Session, event *fra
 
 func (pp *PredicatesPlugin) runUnReservePlugins(ssn *framework.Session, event *framework.Event) {
 	state := ssn.GetCycleState(event.Task.UID)
+	pp.runUnreservePluginsWithState(context.TODO(), state, event.Task.Pod, event.Task.Pod.Spec.NodeName)
+}
 
-	for i := len(pp.reserveOrder) - 1; i >= 0; i-- {
-		plugin, exists := pp.ReservePlugins[pp.reserveOrder[i]]
+func (pp *PredicatesPlugin) runUnreservePluginsWithState(ctx context.Context, state *k8sframework.CycleState, pod *v1.Pod, nodeName string) {
+	for i := len(pp.ReserveOrder) - 1; i >= 0; i-- {
+		plugin, exists := pp.ReservePlugins[pp.ReserveOrder[i]]
 		if !exists {
 			continue
 		}
-		plugin.Unreserve(context.TODO(), state, event.Task.Pod, event.Task.Pod.Spec.NodeName)
+		plugin.Unreserve(ctx, state, pod, nodeName)
 	}
 }
 
@@ -818,7 +821,7 @@ func (pp *PredicatesPlugin) PreBind(ctx context.Context, bindCtx *cache.BindCont
 	state := bindCtx.Extensions[pp.Name()].(*BindContextExtension).State
 
 	// Run all PreBind plugins
-	for _, name := range pp.preBindOrder {
+	for _, name := range pp.PreBindOrder {
 		plugin, exists := pp.PreBindPlugins[name]
 		if !exists {
 			continue
@@ -839,14 +842,7 @@ func (pp *PredicatesPlugin) PreBindRollBack(ctx context.Context, bindCtx *cache.
 	}
 
 	state := bindCtx.Extensions[pp.Name()].(*BindContextExtension).State
-
-	for i := len(pp.reserveOrder) - 1; i >= 0; i-- {
-		plugin, exists := pp.ReservePlugins[pp.reserveOrder[i]]
-		if !exists {
-			continue
-		}
-		plugin.Unreserve(ctx, state, bindCtx.TaskInfo.Pod, bindCtx.TaskInfo.Pod.Spec.NodeName)
-	}
+	pp.runUnreservePluginsWithState(ctx, state, bindCtx.TaskInfo.Pod, bindCtx.TaskInfo.Pod.Spec.NodeName)
 }
 
 func (pp *PredicatesPlugin) SetupBindContextExtension(state *k8sframework.CycleState, bindCtx *cache.BindContext) {
