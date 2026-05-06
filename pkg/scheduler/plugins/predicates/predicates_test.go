@@ -596,6 +596,9 @@ func TestPredicateFailureReasonAggregationOrderStable(t *testing.T) {
 		nodeports.Name:         &fakeFilterPlugin{name: nodeports.Name, message: "normal-nodeports"},
 		tainttoleration.Name:   &fakeFilterPlugin{name: tainttoleration.Name, message: "stable-tainttoleration"},
 	}
+	// Predicate walks StableFilterOrder / FilterOrder (filled by InitPlugin in production). Mirror that order here.
+	pp.StableFilterOrder = []string{nodeunschedulable.Name, nodeaffinity.Name, tainttoleration.Name}
+	pp.FilterOrder = []string{nodeunschedulable.Name, nodeaffinity.Name, nodeports.Name, tainttoleration.Name}
 
 	node := &apiv1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
@@ -649,6 +652,7 @@ func TestReserveRollbackOrderStable(t *testing.T) {
 		vbcap.Name:            &fakeReservePlugin{name: vbcap.Name, calls: &calls},
 		dynamicresources.Name: &fakeReservePlugin{name: dynamicresources.Name, calls: &calls},
 	}
+	pp.ReserveOrder = []string{vbcap.Name, dynamicresources.Name}
 
 	pod := util.BuildPod("ns", "p1", "", apiv1.PodPending, nil, "pg", nil, nil)
 	pod.Spec.NodeName = "node-1"
