@@ -232,6 +232,9 @@ func (pp *PredicatesPlugin) OnSessionOpen(ssn *framework.Session) {
 			//predicate gpu sharing
 			for _, val := range api.RegisteredDevices {
 				if devices, ok := nodeInfo.Others[val].(api.Devices); ok {
+					if api.IsNilDevice(devices) {
+						continue
+					}
 					if !devices.HasDeviceRequest(pod) {
 						continue
 					}
@@ -274,6 +277,9 @@ func (pp *PredicatesPlugin) OnSessionOpen(ssn *framework.Session) {
 
 			for _, val := range api.RegisteredDevices {
 				if devices, ok := nodeInfo.Others[val].(api.Devices); ok {
+					if api.IsNilDevice(devices) {
+						continue
+					}
 					if !devices.HasDeviceRequest(pod) {
 						continue
 					}
@@ -411,6 +417,9 @@ func (pp *PredicatesPlugin) OnSessionOpen(ssn *framework.Session) {
 			}
 			devs, ok := devObj.(api.Devices)
 			if !ok {
+				continue
+			}
+			if api.IsNilDevice(devs) {
 				continue
 			}
 			if !devs.HasDeviceRequest(task.Pod) {

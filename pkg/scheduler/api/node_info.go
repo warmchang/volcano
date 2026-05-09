@@ -642,6 +642,10 @@ func (ni *NodeInfo) CloneOthers() map[string]interface{} {
 	others := make(map[string]interface{})
 	for k, v := range ni.Others {
 		if d, ok := v.(Devices); ok {
+			if IsNilDevice(d) {
+				others[k] = v
+				continue
+			}
 			others[k] = d.DeepCopy()
 		} else {
 			others[k] = v
