@@ -311,7 +311,7 @@ func (c *queuecontroller) updateQueueAnnotation(queue *schedulingv1beta1.Queue, 
 	}
 
 	var patch []patchOperation
-	if len(queue.Annotations) == 0 {
+	if queue.Annotations == nil {
 		patch = append(patch, patchOperation{
 			Op:   "add",
 			Path: "/metadata/annotations",
